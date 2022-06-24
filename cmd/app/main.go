@@ -2,12 +2,19 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/url"
+	"os"
 	"time"
 )
 
-const mockSiteName = "http://httpstat.us/"
+//TODO: remove const block after final implementation
+const (
+	mockSiteName = "http://httpstat.us/"
+	mockFileName = "results.log"
+)
+
 const DEFAULT_TIMEOUT = time.Minute
 
 type Config struct {
@@ -27,19 +34,36 @@ func main() {
 
 	app := new(Config)
 	app.Crawler = NewCrawlerInit(ctx, providedURL)
-	//app.Crawler.SetNumberOfThreads(runtime.NumCPU() * 5)
+	app.Crawler.SetNumberOfThreads(100)
 
 	//extract endpoints from the site
 	app.Crawler.ExploreLink(mockSiteName)
 	app.Crawler.Wait()
 
-	app.Crawler.Result.Range(func(_, val any) bool {
-		res := val.(*Response)
-		log.Printf("Status %d:\t%s\n", res.StatusCode, res.VisitedLink)
+	//filter results by tests specific
+
+	//send result to kafka
+	//TODO: replace with sending result to where it needed
+	app.writeResultToFile()
+}
+
+func (app *Config) writeResultToFile() {
+	file, err := os.Create(mockFileName)
+	if err != nil {
+		log.Panicln("Cannot create file for result: ", err)
+	}
+	defer file.Close()
+
+	app.Crawler.Result.Range(func(link, value any) bool {
+		curResult := value.(*Response)
+		strResult := fmt.Sprintf("Code %d:\t%s\n", curResult.StatusCode, link)
+		_, err := file.WriteString(strResult)
+		if err != nil {
+			log.Panicf("Error writing to file\t%s:\t%v", mockFileName, err)
+		}
 
 		return true
 	})
 
-	//filter results by tests specific
-	//send result to kafka
+	log.Println("Result saved to file: ", mockFileName)
 }

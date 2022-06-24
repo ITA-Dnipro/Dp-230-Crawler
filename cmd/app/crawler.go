@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"log"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -31,6 +33,7 @@ type Response struct {
 func NewCrawlerInit(ctx context.Context, urlCrawl *url.URL) *Crawler {
 	ch := make(chan struct{}, 1)
 	ch <- struct{}{}
+
 	return &Crawler{
 		URL:    urlCrawl,
 		Result: new(sync.Map),
@@ -59,7 +62,7 @@ func (cr *Crawler) ExploreLink(link string) {
 		cr.wg.Done()
 	}()
 
-	if cr.shouldExit() || linkVisited(link, cr.Result) {
+	if cr.shouldExit() || !cr.canVisitLink(link) {
 		return
 	}
 
@@ -83,7 +86,7 @@ func (cr *Crawler) queueLinksVisit(pageResponse *Response) {
 	}
 
 	for _, l := range links {
-		if linkVisited(l, cr.Result) {
+		if !cr.canVisitLink(l) {
 			continue
 		}
 
@@ -97,10 +100,13 @@ func (cr *Crawler) queueLinksVisit(pageResponse *Response) {
 	}
 }
 
-func linkVisited(link string, sm *sync.Map) bool {
-	_, ok := sm.Load(link)
+func (cr *Crawler) canVisitLink(link string) bool {
+	_, wasVisited := cr.Result.Load(link)
 
-	return ok
+	rgxForHost := fmt.Sprintf(".*%s.*", strings.ReplaceAll(cr.URL.Host, ".", "\\."))
+	isOurHost, _ := regexp.MatchString(rgxForHost, link)
+
+	return !wasVisited && isOurHost
 }
 
 func (cr *Crawler) makeGetRequest(link string) (*Response, error) {
