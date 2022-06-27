@@ -11,7 +11,7 @@ import (
 
 //TODO: remove const block after final implementation
 const (
-	mockSiteName = "https://fishki.net/"
+	mockSiteName = "https://kp.ru" //"https://fishki.net/"
 	mockFileName = "results.log"
 )
 
@@ -34,10 +34,11 @@ func main() {
 
 	app := new(Config)
 	app.Crawler = NewCrawlerInit(ctx, providedURL)
-	app.Crawler.SetNumberOfThreads(100)
+	app.Crawler.MaxJumps = 1
+	app.Crawler.SetNumberOfThreads(50)
 
 	//extract endpoints from the site
-	app.Crawler.ExploreLink(mockSiteName)
+	app.Crawler.ExploreLink(NewLink(mockSiteName))
 	app.Crawler.Wait()
 
 	//filter results by tests specific
@@ -56,7 +57,8 @@ func (app *Config) writeResultToFile() {
 
 	app.Crawler.Result.Range(func(link, value any) bool {
 		curResult := value.(*Response)
-		strResult := fmt.Sprintf("Code %d:\t%s\n", curResult.StatusCode, link)
+		strResult := fmt.Sprintf("Code %d:\t%s\thas form: %t\n",
+			curResult.StatusCode, link, curResult.HasFormTag)
 		_, err := file.WriteString(strResult)
 		if err != nil {
 			log.Panicf("Error writing to file\t%s:\t%v", mockFileName, err)

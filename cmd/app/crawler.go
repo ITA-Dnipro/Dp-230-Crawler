@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
+	"log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -16,17 +17,12 @@ import (
 const ERR_CONTEXT_DONE = "exit on context done"
 
 type Crawler struct {
-	URL    *url.URL
-	Result *sync.Map
-	ctx    context.Context
-	ch     chan struct{}
-	wg     *sync.WaitGroup
-}
-
-type Response struct {
-	VisitedLink    string
-	StatusCode     int
-	BodyForQueries *goquery.Document
+	URL      *url.URL
+	Result   *sync.Map
+	MaxJumps int
+	ctx      context.Context
+	ch       chan struct{}
+	wg       *sync.WaitGroup
 }
 
 func NewCrawlerInit(ctx context.Context, urlCrawl *url.URL) *Crawler {
@@ -34,11 +30,12 @@ func NewCrawlerInit(ctx context.Context, urlCrawl *url.URL) *Crawler {
 	ch <- struct{}{}
 
 	return &Crawler{
-		URL:    urlCrawl,
-		Result: new(sync.Map),
-		ctx:    ctx,
-		wg:     new(sync.WaitGroup),
-		ch:     ch,
+		URL:      urlCrawl,
+		Result:   new(sync.Map),
+		MaxJumps: 0,
+		ctx:      ctx,
+		wg:       new(sync.WaitGroup),
+		ch:       ch,
 	}
 }
 
@@ -53,7 +50,7 @@ func (cr *Crawler) Wait() {
 	close(cr.ch)
 }
 
-func (cr *Crawler) ExploreLink(link string) {
+func (cr *Crawler) ExploreLink(link *Link) {
 	cr.wg.Add(1)
 
 	defer func() {
@@ -61,18 +58,21 @@ func (cr *Crawler) ExploreLink(link string) {
 		cr.wg.Done()
 	}()
 
-	if cr.shouldExit() || !cr.canVisitLink(link) {
+	if cr.shouldExit() ||
+		!cr.canVisitLink(link.URL) ||
+		cr.MaxJumps < link.Jumps {
 		return
 	}
 
-	cr.Result.Store(link, &Response{})
+	cr.Result.Store(link.URL, &Response{})
 	pageResponse, err := cr.makeGetRequest(link)
 	if err != nil {
-		cr.Result.Delete(link) //???
+		cr.Result.Delete(link.URL) //???
 
 		return
 	}
-	cr.Result.Store(link, pageResponse)
+	pageResponse.ContainsFormTag()
+	cr.Result.Store(link.URL, pageResponse)
 
 	go cr.queueLinksVisit(pageResponse)
 	cr.wg.Add(1)
@@ -81,19 +81,21 @@ func (cr *Crawler) ExploreLink(link string) {
 func (cr *Crawler) queueLinksVisit(pageResponse *Response) {
 	defer cr.wg.Done()
 
-	links := cr.parseLinksFromResponse(pageResponse)
+	links := pageResponse.ParseLinksFromResponse(cr)
 	if links == nil {
 		return
 	}
 
 	for _, l := range links {
-		if !cr.canVisitLink(l) {
+		if !cr.canVisitLink(l.URL) {
 			continue
 		}
 
 		select {
 		case cr.ch <- struct{}{}:
-			go cr.ExploreLink(l)
+			{
+				go cr.ExploreLink(l)
+			}
 		case <-cr.ctx.Done():
 			return
 		}
@@ -109,16 +111,16 @@ func (cr *Crawler) canVisitLink(link string) bool {
 	return !wasVisited && isOurHost
 }
 
-func (cr *Crawler) makeGetRequest(link string) (*Response, error) {
+func (cr *Crawler) makeGetRequest(link *Link) (*Response, error) {
 	if cr.shouldExit() {
 		return nil, errors.New(ERR_CONTEXT_DONE)
 	}
 
-	//log.Println("\tin: ", link)
+	log.Println("\tin: ", link.URL)
 
 	client := new(http.Client)
 	client.Timeout = 7 * time.Second
-	resp, err := client.Get(link)
+	resp, err := client.Get(link.URL)
 	if err != nil {
 		return nil, err
 	}
@@ -138,31 +140,6 @@ func (cr *Crawler) makeGetRequest(link string) (*Response, error) {
 	}
 
 	return result, nil
-}
-
-func (cr *Crawler) parseLinksFromResponse(response *Response) []string {
-	queryDoc := response.BodyForQueries
-	if queryDoc == nil {
-		return nil
-	}
-
-	var result []string
-	queryDoc.Find(`[href]`).
-		EachWithBreak(func(i int, sel *goquery.Selection) bool {
-			link := cr.absoluteURL(sel.Text())
-			if len(sel.Nodes) > 0 {
-				for _, attr := range sel.Nodes[0].Attr {
-					if attr.Key == "href" {
-						link = cr.absoluteURL(attr.Val)
-					}
-				}
-			}
-			result = append(result, link)
-
-			return !cr.shouldExit()
-		})
-
-	return result
 }
 
 func (cr *Crawler) absoluteURL(u string) string {
