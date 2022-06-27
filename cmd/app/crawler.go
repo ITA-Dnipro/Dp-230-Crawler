@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
-	"log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -116,7 +115,7 @@ func (cr *Crawler) makeGetRequest(link *Link) (*Response, error) {
 		return nil, errors.New(ERR_CONTEXT_DONE)
 	}
 
-	log.Println("\tin: ", link.URL)
+	//log.Println("\tin: ", link.URL)
 
 	client := new(http.Client)
 	client.Timeout = 7 * time.Second

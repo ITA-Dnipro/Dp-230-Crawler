@@ -15,7 +15,11 @@ const (
 	mockFileName = "results.log"
 )
 
-const DEFAULT_TIMEOUT = time.Minute
+const (
+	DEFAULT_TIMEOUT = time.Minute
+	NUM_OF_THREADS  = 50
+	MAX_DEPTH       = 3
+)
 
 type Config struct {
 	Crawler *Crawler
@@ -34,10 +38,12 @@ func main() {
 
 	app := new(Config)
 	app.Crawler = NewCrawlerInit(ctx, providedURL)
-	app.Crawler.MaxJumps = 1
-	app.Crawler.SetNumberOfThreads(50)
+	app.Crawler.MaxJumps = MAX_DEPTH
+	app.Crawler.SetNumberOfThreads(NUM_OF_THREADS)
 
 	//extract endpoints from the site
+	log.Printf("Visiting: %s, with %d max jumps & %d threads.\n",
+		providedURL.String(), MAX_DEPTH, NUM_OF_THREADS)
 	app.Crawler.ExploreLink(NewLink(mockSiteName))
 	app.Crawler.Wait()
 
