@@ -11,14 +11,14 @@ import (
 
 //TODO: remove const block after final implementation
 const (
-	mockSiteName = "https://kp.ru" //"https://fishki.net/"
+	mockSiteName = "https://4club.com.ua" //"http://httpstat.us/" //"https://fishki.net/"
 	mockFileName = "results.log"
 )
 
 const (
 	DEFAULT_TIMEOUT = time.Minute
-	NUM_OF_THREADS  = 50
-	MAX_DEPTH       = 3
+	NUM_OF_THREADS  = 100
+	MAX_DEPTH       = 2
 )
 
 type Config struct {

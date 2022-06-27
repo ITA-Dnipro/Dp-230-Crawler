@@ -19,7 +19,7 @@ func NewLink(uri string, jumps ...int) *Link {
 	if len(jumps) > 0 {
 		jumpsToSet = jumps[0]
 	}
-	
+
 	return &Link{
 		URL:   uri,
 		Jumps: jumpsToSet,
@@ -62,4 +62,8 @@ func (resp *Response) ParseLinksFromResponse(crawl *Crawler) []*Link {
 		})
 
 	return result
+}
+
+func (resp *Response) ClearResponseBody() {
+	resp.BodyForQueries = nil
 }

@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/PuerkitoBio/goquery"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/PuerkitoBio/goquery"
 )
 
 const ERR_CONTEXT_DONE = "exit on context done"
@@ -81,6 +82,7 @@ func (cr *Crawler) queueLinksVisit(pageResponse *Response) {
 	defer cr.wg.Done()
 
 	links := pageResponse.ParseLinksFromResponse(cr)
+	pageResponse.ClearResponseBody()
 	if links == nil {
 		return
 	}
