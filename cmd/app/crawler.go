@@ -66,11 +66,13 @@ func (cr *Crawler) ExploreLink(link string) {
 		return
 	}
 
+	cr.Result.Store(link, &Response{})
 	pageResponse, err := cr.makeGetRequest(link)
 	if err != nil {
+		cr.Result.Delete(link) //???
+
 		return
 	}
-
 	cr.Result.Store(link, pageResponse)
 
 	go cr.queueLinksVisit(pageResponse)
@@ -92,7 +94,6 @@ func (cr *Crawler) queueLinksVisit(pageResponse *Response) {
 
 		select {
 		case cr.ch <- struct{}{}:
-			log.Println("\tin: ", l)
 			go cr.ExploreLink(l)
 		case <-cr.ctx.Done():
 			return
@@ -103,7 +104,7 @@ func (cr *Crawler) queueLinksVisit(pageResponse *Response) {
 func (cr *Crawler) canVisitLink(link string) bool {
 	_, wasVisited := cr.Result.Load(link)
 
-	rgxForHost := fmt.Sprintf(".*%s.*", strings.ReplaceAll(cr.URL.Host, ".", "\\."))
+	rgxForHost := fmt.Sprintf("%s.*", strings.ReplaceAll(cr.URL.String(), ".", "\\."))
 	isOurHost, _ := regexp.MatchString(rgxForHost, link)
 
 	return !wasVisited && isOurHost
@@ -114,8 +115,10 @@ func (cr *Crawler) makeGetRequest(link string) (*Response, error) {
 		return nil, errors.New(ERR_CONTEXT_DONE)
 	}
 
+	log.Println("\tin: ", link)
+
 	client := new(http.Client)
-	client.Timeout = 5 * time.Second
+	client.Timeout = 7 * time.Second
 	resp, err := client.Get(link)
 	if err != nil {
 		return nil, err
@@ -148,6 +151,13 @@ func (cr *Crawler) parseLinksFromResponse(response *Response) []string {
 	queryDoc.Find(`[href]`).
 		EachWithBreak(func(i int, sel *goquery.Selection) bool {
 			link := cr.absoluteURL(sel.Text())
+			if len(sel.Nodes) > 0 {
+				for _, attr := range sel.Nodes[0].Attr {
+					if attr.Key == "href" {
+						link = cr.absoluteURL(attr.Val)
+					}
+				}
+			}
 			result = append(result, link)
 
 			return !cr.shouldExit()
