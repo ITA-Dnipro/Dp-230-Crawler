@@ -11,7 +11,7 @@ import (
 
 //TODO: remove const block after final implementation
 const (
-	mockSiteName = "http://httpstat.us/"
+	mockSiteName = "https://fishki.net/"
 	mockFileName = "results.log"
 )
 
