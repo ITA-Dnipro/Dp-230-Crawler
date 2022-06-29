@@ -1,6 +1,10 @@
 package main
 
-import "github.com/PuerkitoBio/goquery"
+import (
+	"io"
+
+	"github.com/PuerkitoBio/goquery"
+)
 
 type Response struct {
 	VisitedLink    *Link
@@ -24,6 +28,23 @@ func NewLink(uri string, jumps ...int) *Link {
 		URL:   uri,
 		Jumps: jumpsToSet,
 	}
+}
+
+func NewResponse(link *Link, status int) *Response {
+	return &Response{
+		VisitedLink: link,
+		StatusCode:  status,
+	}
+}
+
+func (resp *Response) FillResponseBody(receivedBody io.ReadCloser) error {
+	queryDoc, err := goquery.NewDocumentFromReader(receivedBody)
+	if err != nil {
+		return err
+	}
+	resp.BodyForQueries = queryDoc
+
+	return nil
 }
 
 func (resp *Response) ContainsFormTag() {

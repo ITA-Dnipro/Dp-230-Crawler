@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -10,11 +9,9 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/PuerkitoBio/goquery"
 )
 
-const ERR_CONTEXT_DONE = "exit on context done"
+var ErrContextDone = fmt.Errorf("exit on context done")
 
 type Crawler struct {
 	URL      *url.URL
@@ -114,7 +111,7 @@ func (cr *Crawler) canVisitLink(link string) bool {
 
 func (cr *Crawler) makeGetRequest(link *Link) (*Response, error) {
 	if cr.shouldExit() {
-		return nil, errors.New(ERR_CONTEXT_DONE)
+		return nil, ErrContextDone
 	}
 
 	//log.Println("\tin: ", link.URL)
@@ -123,21 +120,16 @@ func (cr *Crawler) makeGetRequest(link *Link) (*Response, error) {
 	client.Timeout = 7 * time.Second
 	resp, err := client.Get(link.URL)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error in GET request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	result := &Response{
-		VisitedLink: link,
-		StatusCode:  resp.StatusCode,
-	}
+	result := NewResponse(link, resp.StatusCode)
 
 	if resp.StatusCode == http.StatusOK {
-		queryDoc, err := goquery.NewDocumentFromReader(resp.Body)
-		if err != nil {
-			return nil, err
+		if err = result.FillResponseBody(resp.Body); err != nil {
+			return nil, fmt.Errorf("error converting response body to goquery: %w", err)
 		}
-		result.BodyForQueries = queryDoc
 	}
 
 	return result, nil
