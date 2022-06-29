@@ -20,11 +20,19 @@ type Crawler struct {
 	ctx      context.Context
 	ch       chan struct{}
 	wg       *sync.WaitGroup
+	client   httpClientGetter
+}
+
+type httpClientGetter interface {
+	Get(link string) (resp *http.Response, err error)
 }
 
 func NewCrawlerInit(ctx context.Context, urlCrawl *url.URL) *Crawler {
 	ch := make(chan struct{}, 1)
 	ch <- struct{}{}
+
+	client := new(http.Client)
+	client.Timeout = 7 * time.Second
 
 	return &Crawler{
 		URL:      urlCrawl,
@@ -33,6 +41,7 @@ func NewCrawlerInit(ctx context.Context, urlCrawl *url.URL) *Crawler {
 		ctx:      ctx,
 		wg:       new(sync.WaitGroup),
 		ch:       ch,
+		client:   client,
 	}
 }
 
@@ -114,11 +123,7 @@ func (cr *Crawler) makeGetRequest(link *Link) (*Response, error) {
 		return nil, ErrContextDone
 	}
 
-	//log.Println("\tin: ", link.URL)
-
-	client := new(http.Client)
-	client.Timeout = 7 * time.Second
-	resp, err := client.Get(link.URL)
+	resp, err := cr.client.Get(link.URL)
 	if err != nil {
 		return nil, fmt.Errorf("error in GET request: %w", err)
 	}

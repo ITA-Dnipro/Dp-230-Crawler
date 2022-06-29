@@ -17,7 +17,11 @@ endif
 
 .PHONY: test
 test:
-	@go test -count=1 -v ./...
+	@go test -count=1 -race -v ./...
+
+.PHONY: test100
+test100:
+	@go test -count=100 -v ./...
 
 .PHONY: test-coverage
 test-coverage:
