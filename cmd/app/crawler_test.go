@@ -10,7 +10,9 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/stretchr/testify/require"
 )
 
@@ -202,4 +204,36 @@ func requireSyncMapsAreEqual(t *testing.T, a, b *sync.Map, msg string) {
 	})
 
 	require.Equal(t, mapA, mapB, msg)
+}
+
+func TestQueueLinksVisit(t *testing.T) {
+	urlFake, _ := url.Parse(fakeLink)
+	crawler := NewCrawlerInit(context.Background(), urlFake)
+	crawler.client = &httpClientStub{}
+	crawler.MaxJumps = 10
+	crawler.Result.Store(fakeLink+"search", &Response{})
+
+	bodyWithLink := ioutil.NopCloser(strings.NewReader("<a href='search'>find</a><a href='/'>self</a>"))
+	defer bodyWithLink.Close()
+	queryWithLink, _ := goquery.NewDocumentFromReader(bodyWithLink)
+
+	response := &Response{
+		VisitedLink:    NewLink(fakeLink),
+		StatusCode:     http.StatusOK,
+		BodyForQueries: queryWithLink,
+		HasFormTag:     true,
+	}
+
+	crawler.wg.Add(1)
+	<-crawler.ch
+	crawler.queueLinksVisit(response)
+	time.Sleep(time.Millisecond)
+	crawler.Wait()
+
+	response.VisitedLink.Jumps++
+	expectedSM := &sync.Map{}
+	expectedSM.Store(fakeLink, response)
+	expectedSM.Store(fakeLink+"search", &Response{})
+
+	requireSyncMapsAreEqual(t, expectedSM, crawler.Result, "should be equal")
 }

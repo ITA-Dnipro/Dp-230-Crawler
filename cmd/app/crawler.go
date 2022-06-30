@@ -145,7 +145,13 @@ func (cr *Crawler) absoluteURL(u string) string {
 		return ""
 	}
 
-	absURL, err := cr.URL.Parse(u)
+	var absURL *url.URL
+	var err error
+	if cr.URL == nil {
+		absURL, err = url.Parse(u)
+	} else {
+		absURL, err = cr.URL.Parse(u)
+	}
 	if err != nil {
 		return ""
 	}
@@ -159,6 +165,10 @@ func (cr *Crawler) absoluteURL(u string) string {
 }
 
 func (cr *Crawler) shouldExit() bool {
+	if cr.ctx == nil {
+		return false
+	}
+
 	select {
 	case <-cr.ctx.Done():
 		return true

@@ -21,7 +21,7 @@ test:
 
 .PHONY: test100
 test100:
-	@go test -count=100 -v ./...
+	@go test -count=100 ./...
 
 .PHONY: test-coverage
 test-coverage:
