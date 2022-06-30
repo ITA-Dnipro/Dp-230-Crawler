@@ -1,4 +1,4 @@
-module Crawler
+module parabellum.crawler
 
 go 1.18
 

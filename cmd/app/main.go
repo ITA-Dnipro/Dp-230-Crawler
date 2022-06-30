@@ -7,22 +7,24 @@ import (
 	"net/url"
 	"os"
 	"time"
+
+	"parabellum.crawler/internal/crawler"
 )
 
 //TODO: remove const block after final implementation
 const (
-	mockSiteName = "https://4club.com.ua" //"http://httpstat.us/" //"https://fishki.net/"
+	mockSiteName = "http://httpstat.us/"
 	mockFileName = "results.log"
 )
 
 const (
 	DEFAULT_TIMEOUT = time.Minute
-	NUM_OF_THREADS  = 100
-	MAX_DEPTH       = 2
+	NUM_OF_THREADS  = 50
+	MAX_DEPTH       = 3
 )
 
 type Config struct {
-	Crawler *Crawler
+	Crawler *crawler.Crawler
 }
 
 func main() {
@@ -37,14 +39,14 @@ func main() {
 	defer cancel()
 
 	app := new(Config)
-	app.Crawler = NewCrawlerInit(ctx, providedURL)
+	app.Crawler = crawler.NewCrawlerInit(ctx, providedURL)
 	app.Crawler.MaxJumps = MAX_DEPTH
 	app.Crawler.SetNumberOfThreads(NUM_OF_THREADS)
 
 	//extract endpoints from the site
 	log.Printf("Visiting: %s, with %d max jumps & %d threads.\n",
 		providedURL.String(), MAX_DEPTH, NUM_OF_THREADS)
-	app.Crawler.ExploreLink(NewLink(mockSiteName))
+	app.Crawler.ExploreLink(crawler.NewLink(mockSiteName))
 	app.Crawler.Wait()
 
 	//filter results by tests specific
@@ -62,9 +64,9 @@ func (app *Config) writeResultToFile() {
 	defer file.Close()
 
 	app.Crawler.Result.Range(func(link, value any) bool {
-		curResult := value.(*Response)
-		strResult := fmt.Sprintf("Code %d:\t%s\thas form: %t\n",
-			curResult.StatusCode, link, curResult.HasFormTag)
+		curResult := value.(*crawler.Response)
+		strResult := fmt.Sprintf("Code %d:\tWith form: %t \t-\t%s\n",
+			curResult.StatusCode, curResult.HasFormTag, link)
 		_, err := file.WriteString(strResult)
 		if err != nil {
 			log.Panicf("Error writing to file\t%s:\t%v", mockFileName, err)
