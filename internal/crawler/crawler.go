@@ -1,4 +1,4 @@
-package main
+package crawler
 
 import (
 	"context"
@@ -20,11 +20,19 @@ type Crawler struct {
 	ctx      context.Context
 	ch       chan struct{}
 	wg       *sync.WaitGroup
+	client   httpClientGetter
+}
+
+type httpClientGetter interface {
+	Get(link string) (resp *http.Response, err error)
 }
 
 func NewCrawlerInit(ctx context.Context, urlCrawl *url.URL) *Crawler {
 	ch := make(chan struct{}, 1)
 	ch <- struct{}{}
+
+	client := new(http.Client)
+	client.Timeout = 7 * time.Second
 
 	return &Crawler{
 		URL:      urlCrawl,
@@ -33,6 +41,7 @@ func NewCrawlerInit(ctx context.Context, urlCrawl *url.URL) *Crawler {
 		ctx:      ctx,
 		wg:       new(sync.WaitGroup),
 		ch:       ch,
+		client:   client,
 	}
 }
 
@@ -114,11 +123,7 @@ func (cr *Crawler) makeGetRequest(link *Link) (*Response, error) {
 		return nil, ErrContextDone
 	}
 
-	//log.Println("\tin: ", link.URL)
-
-	client := new(http.Client)
-	client.Timeout = 7 * time.Second
-	resp, err := client.Get(link.URL)
+	resp, err := cr.client.Get(link.URL)
 	if err != nil {
 		return nil, fmt.Errorf("error in GET request: %w", err)
 	}
@@ -140,7 +145,13 @@ func (cr *Crawler) absoluteURL(u string) string {
 		return ""
 	}
 
-	absURL, err := cr.URL.Parse(u)
+	var absURL *url.URL
+	var err error
+	if cr.URL == nil {
+		absURL, err = url.Parse(u)
+	} else {
+		absURL, err = cr.URL.Parse(u)
+	}
 	if err != nil {
 		return ""
 	}
@@ -154,6 +165,10 @@ func (cr *Crawler) absoluteURL(u string) string {
 }
 
 func (cr *Crawler) shouldExit() bool {
+	if cr.ctx == nil {
+		return false
+	}
+
 	select {
 	case <-cr.ctx.Done():
 		return true

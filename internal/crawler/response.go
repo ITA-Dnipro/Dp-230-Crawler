@@ -1,4 +1,4 @@
-package main
+package crawler
 
 import (
 	"io"
@@ -64,7 +64,11 @@ func (resp *Response) ParseLinksFromResponse(crawl *Crawler) []*Link {
 		return nil
 	}
 
-	linkDepth := resp.VisitedLink.Jumps + 1
+	var linkDepth int
+	if resp.VisitedLink != nil {
+		linkDepth = resp.VisitedLink.Jumps + 1
+	}
+
 	var result []*Link
 	queryDoc.Find(`[href]`).
 		EachWithBreak(func(i int, sel *goquery.Selection) bool {
