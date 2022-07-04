@@ -79,7 +79,7 @@ func TestParseLinksFromResponse(t *testing.T) {
 		},
 		{
 			name:    "with multiple links",
-			crawler: NewCrawlerInit(context.Background(), urlForCrawler),
+			crawler: NewCrawler(context.Background(), urlForCrawler),
 			response: &Response{
 				BodyForQueries: queryWithMultipleLinks,
 			},

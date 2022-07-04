@@ -6,16 +6,17 @@ import (
 	"log"
 	"net/url"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"parabellum.crawler/internal/crawler"
+	"parabellum.crawler/internal/pubsub"
+
+	"github.com/joho/godotenv"
 )
 
-//TODO: remove const block after final implementation
-const (
-	mockSiteName = "http://httpstat.us/"
-	mockFileName = "results.log"
-)
+const pathToEnvFile = ".env"
 
 const (
 	DEFAULT_TIMEOUT = time.Minute
@@ -24,56 +25,97 @@ const (
 )
 
 type Config struct {
-	Crawler *crawler.Crawler
+	Crawler   *crawler.Crawler
+	Consumer  *pubsub.Consumer
+	Producers []*pubsub.Producer
+}
+
+func init() {
+	err := godotenv.Load(pathToEnvFile)
+	if err != nil {
+		log.Panicln("Error loading .env file: ", err)
+	}
 }
 
 func main() {
-	//receive input - site to crawl
-	//TODO: unmock site name receiving, when get input data format
-	providedURL, err := url.Parse(mockSiteName)
-	if err != nil {
-		log.Panicln("Wrong site name provided: ", err)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), DEFAULT_TIMEOUT)
-	defer cancel()
-
 	app := new(Config)
-	app.Crawler = crawler.NewCrawlerInit(ctx, providedURL)
-	app.Crawler.MaxJumps = MAX_DEPTH
-	app.Crawler.SetNumberOfThreads(NUM_OF_THREADS)
 
-	//extract endpoints from the site
-	log.Printf("Visiting: %s, with %d max jumps & %d threads.\n",
-		providedURL.String(), MAX_DEPTH, NUM_OF_THREADS)
-	app.Crawler.ExploreLink(crawler.NewLink(mockSiteName))
-	app.Crawler.Wait()
+	app.initPubSub()
+	defer app.closePubSub()
 
-	//filter results by tests specific
+	exitCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
 
-	//send result to kafka
-	//TODO: replace with sending result to where it needed
-	app.writeResultToFile()
-}
-
-func (app *Config) writeResultToFile() {
-	file, err := os.Create(mockFileName)
-	if err != nil {
-		log.Panicln("Cannot create file for result: ", err)
-	}
-	defer file.Close()
-
-	app.Crawler.Result.Range(func(link, value any) bool {
-		curResult := value.(*crawler.Response)
-		strResult := fmt.Sprintf("Code %d:\tWith form: %t \t-\t%s\n",
-			curResult.StatusCode, curResult.HasFormTag, link)
-		_, err := file.WriteString(strResult)
+	run := true
+	for run {
+		taskInfo, err := app.Consumer.ReadMessage(exitCtx)
 		if err != nil {
-			log.Panicf("Error writing to file\t%s:\t%v", mockFileName, err)
+			log.Panicf("Error consuming message: %v. %v\n", taskInfo, err)
 		}
 
+		siteName := app.getUrlFromMessage(taskInfo)
+		providedURL, err := url.Parse(siteName)
+		if err != nil {
+			log.Printf("Wrong site name provided %s: %v\n", siteName, err)
+			continue
+		}
+
+		ctx, cancel := context.WithTimeout(exitCtx, DEFAULT_TIMEOUT)
+
+		app.Crawler = crawler.NewCrawler(ctx, providedURL)
+		app.Crawler.MaxJumps = MAX_DEPTH
+		app.Crawler.SetNumberOfThreads(NUM_OF_THREADS)
+		log.Printf("Visiting: %s, with %d max jumps & %d threads.\n",
+			providedURL.String(), MAX_DEPTH, NUM_OF_THREADS)
+		app.Crawler.ExploreLink(crawler.NewLink(providedURL.String()))
+		app.Crawler.Wait()
+
+		cancel()
+
+		app.pubCompleted(exitCtx)
+
+		select {
+		case <-exitCtx.Done():
+			run = false
+		default:
+			continue
+		}
+	}
+
+}
+
+func (app *Config) initPubSub() error {
+	kafkaURL := os.Getenv("KAFKA_URL")
+
+	app.Consumer = pubsub.NewConsumer(kafkaURL, os.Getenv("KAFKA_TOPIC_API"))
+
+	producerSQLi := pubsub.NewProducer(kafkaURL, os.Getenv("KAFKA_TOPIC_TEST_SQLI"))
+	app.Producers = append(app.Producers, producerSQLi)
+
+	return nil
+}
+
+func (app *Config) closePubSub() {
+	app.Consumer.Close()
+	for _, prod := range app.Producers {
+		prod.Close()
+	}
+}
+
+func (app *Config) getUrlFromMessage(message pubsub.Message) string {
+	return message.Value
+}
+
+func (app *Config) pubCompleted(ctx context.Context) {
+	app.Crawler.Result.Range(func(link, value any) bool {
+		if curResult, ok := value.(*crawler.Response); ok {
+			strResult := fmt.Sprintf("Code %d:\tWith form: %t \t-\t%s\n",
+				curResult.StatusCode, curResult.HasFormTag, link)
+
+			for _, prod := range app.Producers {
+				prod.PublicMessage(ctx, pubsub.NewMessage(strResult))
+			}
+		}
 		return true
 	})
-
-	log.Println("Result saved to file: ", mockFileName)
 }

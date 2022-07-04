@@ -27,7 +27,7 @@ type httpClientGetter interface {
 	Get(link string) (resp *http.Response, err error)
 }
 
-func NewCrawlerInit(ctx context.Context, urlCrawl *url.URL) *Crawler {
+func NewCrawler(ctx context.Context, urlCrawl *url.URL) *Crawler {
 	ch := make(chan struct{}, 1)
 	ch <- struct{}{}
 
