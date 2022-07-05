@@ -2,6 +2,7 @@ package pubsub
 
 import (
 	"context"
+	"log"
 
 	"github.com/segmentio/kafka-go"
 )
@@ -23,9 +24,12 @@ func NewProducer(url, topic string) *Producer {
 func (prod *Producer) PublicMessage(ctx context.Context, message Message) error {
 	msg := kafka.Message{
 		Key:   []byte(message.Key),
-		Value: []byte(message.Value),
+		Value: message.Value.ToJson(),
 		Time:  message.Time,
 	}
+
+	log.Println("Publishing into Kafka topic:", prod.kafkaWriter.Topic)
+	log.Println("\t", string(msg.Value))
 
 	return prod.kafkaWriter.WriteMessages(ctx, msg)
 }

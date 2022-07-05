@@ -2,15 +2,22 @@ package crawler
 
 import (
 	"io"
+	"net/url"
 
 	"github.com/PuerkitoBio/goquery"
+)
+
+const NumOfBodyParams = 2
+const (
+	HasFormTag = iota
+	HasQueryParameter
 )
 
 type Response struct {
 	VisitedLink    *Link
 	StatusCode     int
 	BodyForQueries *goquery.Document
-	HasFormTag     bool
+	BodyParams     [NumOfBodyParams]bool
 }
 
 type Link struct {
@@ -37,6 +44,10 @@ func NewResponse(link *Link, status int) *Response {
 	}
 }
 
+func (resp *Response) EqualsByParams(comparedParams [NumOfBodyParams]bool) bool {
+	return comparedParams == resp.BodyParams
+}
+
 func (resp *Response) FillResponseBody(receivedBody io.ReadCloser) error {
 	queryDoc, err := goquery.NewDocumentFromReader(receivedBody)
 	if err != nil {
@@ -47,15 +58,29 @@ func (resp *Response) FillResponseBody(receivedBody io.ReadCloser) error {
 	return nil
 }
 
-func (resp *Response) ContainsFormTag() {
+func (resp *Response) FillResponseParameters() {
+	resp.fillHasFormTag()
+	resp.fillHasQueryParams()
+}
+
+func (resp *Response) fillHasFormTag() {
 	queryDoc := resp.BodyForQueries
 	if queryDoc == nil {
 		return
 	}
 
 	if len(queryDoc.Has("form").Nodes) > 0 {
-		resp.HasFormTag = true
+		resp.BodyParams[HasFormTag] = true
 	}
+}
+
+func (resp *Response) fillHasQueryParams() {
+	linkUrl, err := url.Parse(resp.VisitedLink.URL)
+	if err != nil {
+		return
+	}
+	params := linkUrl.Query()
+	resp.BodyParams[HasQueryParameter] = len(params) > 0
 }
 
 func (resp *Response) ParseLinksFromResponse(crawl *Crawler) []*Link {

@@ -47,8 +47,8 @@ func TestContainsFormTag(t *testing.T) {
 
 	for _, test := range tabTest {
 		t.Run(test.name, func(t *testing.T) {
-			test.response.ContainsFormTag()
-			require.Equal(t, test.expected, test.response.HasFormTag, "should equal")
+			test.response.fillHasFormTag()
+			require.Equal(t, test.expected, test.response.BodyParams[HasFormTag], "should equal")
 		})
 	}
 }

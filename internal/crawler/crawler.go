@@ -77,7 +77,7 @@ func (cr *Crawler) ExploreLink(link *Link) {
 
 		return
 	}
-	pageResponse.ContainsFormTag()
+	pageResponse.FillResponseParameters()
 	cr.Result.Store(link.URL, pageResponse)
 
 	go cr.queueLinksVisit(pageResponse)

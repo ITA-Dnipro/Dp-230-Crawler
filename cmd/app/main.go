@@ -2,33 +2,17 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"parabellum.crawler/internal/crawler"
 	"parabellum.crawler/internal/pubsub"
 
 	"github.com/joho/godotenv"
 )
-
-const pathToEnvFile = ".env"
-
-const (
-	DEFAULT_TIMEOUT = time.Minute
-	NUM_OF_THREADS  = 50
-	MAX_DEPTH       = 3
-)
-
-type Config struct {
-	Crawler   *crawler.Crawler
-	Consumer  *pubsub.Consumer
-	Producers []*pubsub.Producer
-}
 
 func init() {
 	err := godotenv.Load(pathToEnvFile)
@@ -50,10 +34,21 @@ func main() {
 	for run {
 		taskInfo, err := app.Consumer.ReadMessage(exitCtx)
 		if err != nil {
+			if err == exitCtx.Err() {
+				log.Println("Exiting on termination signal")
+				return
+			}
 			log.Panicf("Error consuming message: %v. %v\n", taskInfo, err)
 		}
 
-		siteName := app.getUrlFromMessage(taskInfo)
+		siteID := app.idFromMessage(taskInfo)
+		payload, err := taskInfo.Value.ConsumePayload()
+		if err != nil {
+			continue
+		}
+		siteName := payload.URL
+		testsToComplete := payload.ForwardTo
+
 		providedURL, err := url.Parse(siteName)
 		if err != nil {
 			log.Printf("Wrong site name provided %s: %v\n", siteName, err)
@@ -72,10 +67,13 @@ func main() {
 
 		cancel()
 
-		app.pubCompleted(exitCtx)
+		app.publishCompletedResults(exitCtx, siteID, testsToComplete)
+
+		log.Printf("Done with task %s\tlink:\t%s.\n", siteID, siteName)
 
 		select {
 		case <-exitCtx.Done():
+			log.Println("Exiting on termination signal")
 			run = false
 		default:
 			continue
@@ -89,8 +87,10 @@ func (app *Config) initPubSub() error {
 
 	app.Consumer = pubsub.NewConsumer(kafkaURL, os.Getenv("KAFKA_TOPIC_API"))
 
-	producerSQLi := pubsub.NewProducer(kafkaURL, os.Getenv("KAFKA_TOPIC_TEST_SQLI"))
-	app.Producers = append(app.Producers, producerSQLi)
+	app.Producers = map[string]*pubsub.Producer{}
+	for testName := range TestsFilters {
+		app.Producers[testName] = pubsub.NewProducer(kafkaURL, testName)
+	}
 
 	return nil
 }
@@ -102,20 +102,30 @@ func (app *Config) closePubSub() {
 	}
 }
 
-func (app *Config) getUrlFromMessage(message pubsub.Message) string {
-	return message.Value
+func (app *Config) idFromMessage(message pubsub.Message) string {
+	return message.Value.ID
 }
 
-func (app *Config) pubCompleted(ctx context.Context) {
+func (app *Config) distributeResultsBetweenTests(tests []string) map[string][]string {
+	resForTests := map[string][]string{}
 	app.Crawler.Result.Range(func(link, value any) bool {
-		if curResult, ok := value.(*crawler.Response); ok {
-			strResult := fmt.Sprintf("Code %d:\tWith form: %t \t-\t%s\n",
-				curResult.StatusCode, curResult.HasFormTag, link)
-
-			for _, prod := range app.Producers {
-				prod.PublicMessage(ctx, pubsub.NewMessage(strResult))
+		if curResponse, ok := value.(*crawler.Response); ok {
+			for _, tName := range tests {
+				tParam := TestsFilters[tName]
+				if curResponse.EqualsByParams(tParam) {
+					resForTests[tName] = append(resForTests[tName], curResponse.VisitedLink.URL)
+				}
 			}
 		}
 		return true
 	})
+	return resForTests
+}
+
+func (app *Config) publishCompletedResults(ctx context.Context, mainTaskID string, tests []string) {
+	resForTests := app.distributeResultsBetweenTests(tests)
+
+	for tName, tTask := range resForTests {
+		app.Producers[tName].PublicMessage(ctx, pubsub.NewMessageProduce(mainTaskID, tTask))
+	}
 }

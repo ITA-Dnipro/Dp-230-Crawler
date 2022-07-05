@@ -96,8 +96,8 @@ func TestExploreLink(t *testing.T) {
 	someResponse := &Response{
 		VisitedLink: link,
 		StatusCode:  http.StatusOK,
-		HasFormTag:  true,
 	}
+	someResponse.BodyParams[HasFormTag] = true
 	smWithResponse := &sync.Map{}
 	smWithResponse.Store(fakeLink, someResponse)
 	smWithEmpty := &sync.Map{}
@@ -196,7 +196,7 @@ func requireSyncMapsAreEqual(t *testing.T, a, b *sync.Map, msg string) {
 			mapB[key] = &Response{
 				VisitedLink: resp.VisitedLink,
 				StatusCode:  resp.StatusCode,
-				HasFormTag:  resp.HasFormTag,
+				BodyParams:  resp.BodyParams,
 			}
 		}
 
@@ -221,8 +221,8 @@ func TestQueueLinksVisit(t *testing.T) {
 		VisitedLink:    NewLink(fakeLink),
 		StatusCode:     http.StatusOK,
 		BodyForQueries: queryWithLink,
-		HasFormTag:     true,
 	}
+	response.BodyParams[HasFormTag] = true
 
 	crawler.wg.Add(1)
 	<-crawler.ch
