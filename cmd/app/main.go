@@ -2,17 +2,26 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"parabellum.crawler/internal/crawler"
 	"parabellum.crawler/internal/pubsub"
+	"parabellum.crawler/model"
 
 	"github.com/joho/godotenv"
 )
+
+type Config struct {
+	Crawler   *crawler.Crawler
+	Consumer  *pubsub.Consumer
+	Producers map[string]*pubsub.Producer
+}
 
 func init() {
 	err := godotenv.Load(pathToEnvFile)
@@ -30,80 +39,90 @@ func main() {
 	exitCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	run := true
-	for run {
-		taskInfo, err := app.Consumer.ReadMessage(exitCtx)
-		if err != nil {
-			if err == exitCtx.Err() {
-				log.Println("Exiting on termination signal")
-				return
-			}
-			log.Panicf("Error consuming message: %v. %v\n", taskInfo, err)
-		}
-
-		siteID := app.idFromMessage(taskInfo)
-		payload, err := taskInfo.Value.ConsumePayload()
+	for {
+		err := app.ExecuteNextTask(exitCtx)
 		if err != nil {
 			continue
 		}
-		siteName := payload.URL
-		testsToComplete := payload.ForwardTo
-
-		providedURL, err := url.Parse(siteName)
-		if err != nil {
-			log.Printf("Wrong site name provided %s: %v\n", siteName, err)
-			continue
-		}
-
-		ctx, cancel := context.WithTimeout(exitCtx, DEFAULT_TIMEOUT)
-
-		app.Crawler = crawler.NewCrawler(ctx, providedURL)
-		app.Crawler.MaxJumps = MAX_DEPTH
-		app.Crawler.SetNumberOfThreads(NUM_OF_THREADS)
-		log.Printf("Visiting: %s, with %d max jumps & %d threads.\n",
-			providedURL.String(), MAX_DEPTH, NUM_OF_THREADS)
-		app.Crawler.ExploreLink(crawler.NewLink(providedURL.String()))
-		app.Crawler.Wait()
-
-		cancel()
-
-		app.publishCompletedResults(exitCtx, siteID, testsToComplete)
-
-		log.Printf("Done with task %s\tlink:\t%s.\n", siteID, siteName)
 
 		select {
 		case <-exitCtx.Done():
 			log.Println("Exiting on termination signal")
-			run = false
+
+			return
 		default:
-			continue
 		}
 	}
-
 }
 
-func (app *Config) initPubSub() error {
-	kafkaURL := os.Getenv("KAFKA_URL")
+func (app *Config) ExecuteNextTask(exitCtx context.Context) error {
+	taskInfo, err := app.Consumer.FetchMessage(exitCtx)
+	if err != nil {
+		if err == exitCtx.Err() {
+			return nil
+		}
+		log.Printf("Error consuming message from:\t%s.\t%v\n", app.Consumer.Topic, err)
 
-	app.Consumer = pubsub.NewConsumer(kafkaURL, os.Getenv("KAFKA_TOPIC_API"))
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(exitCtx, EnvVarOfType("CRAWLER_DEFAULT_TIMEOUT", TypeTimeSecond).(time.Duration))
+	err = app.doCrawlerJob(ctx, taskInfo.Value.URL)
+	cancel()
+	if err != nil {
+		return err
+	}
+
+	err = app.publishCompletedResults(exitCtx, taskInfo.Value.ID, taskInfo.Value.ForwardTo)
+	if err != nil {
+		log.Printf("Not enough tests will be invoked for task ID: %s \t%v\n", taskInfo.Value.ID, err)
+
+		return err
+	}
+
+	err = app.Consumer.CommitMessage(exitCtx, taskInfo)
+	if err != nil {
+		log.Printf("Failed to commit task ID: %s \t%v\n", taskInfo.Value.ID, err)
+	} else {
+		log.Printf("Done with task ID: %s\n", taskInfo.Value.ID)
+	}
+
+	return err
+}
+
+func (app *Config) initPubSub() {
+	kafkaURL := EnvVarOfType("KAFKA_URL", TypeString).(string)
+
+	app.Consumer = pubsub.NewConsumer(kafkaURL, EnvVarOfType("KAFKA_TOPIC_API", TypeString).(string))
 
 	app.Producers = map[string]*pubsub.Producer{}
 	for testName := range TestsFilters {
 		app.Producers[testName] = pubsub.NewProducer(kafkaURL, testName)
 	}
-
-	return nil
 }
 
 func (app *Config) closePubSub() {
-	app.Consumer.Close()
+	_ = app.Consumer.Close()
 	for _, prod := range app.Producers {
-		prod.Close()
+		_ = prod.Close()
 	}
 }
 
-func (app *Config) idFromMessage(message pubsub.Message) string {
-	return message.Value.ID
+func (app *Config) doCrawlerJob(ctx context.Context, siteName string) error {
+	providedURL, err := url.Parse(siteName)
+	if err != nil {
+		log.Printf("Wrong site name provided %s: %v\n", siteName, err)
+
+		return err
+	}
+	app.Crawler = crawler.NewCrawler(ctx, providedURL)
+	app.Crawler.MaxJumps = EnvVarOfType("CRAWLER_MAX_DEPTH", TypeInt).(int)
+	app.Crawler.SetNumberOfThreads(EnvVarOfType("CRAWLER_NUM_OF_THREADS", TypeInt).(int))
+	log.Printf("Crawling on: %s.\n", providedURL.String())
+	app.Crawler.ExploreLink(crawler.NewLink(providedURL.String()))
+	app.Crawler.Wait()
+
+	return nil
 }
 
 func (app *Config) distributeResultsBetweenTests(tests []string) map[string][]string {
@@ -117,15 +136,28 @@ func (app *Config) distributeResultsBetweenTests(tests []string) map[string][]st
 				}
 			}
 		}
+
 		return true
 	})
+
 	return resForTests
 }
 
-func (app *Config) publishCompletedResults(ctx context.Context, mainTaskID string, tests []string) {
+func (app *Config) publishCompletedResults(ctx context.Context, mainTaskID string, tests []string) error {
 	resForTests := app.distributeResultsBetweenTests(tests)
 
+	var errCount int
 	for tName, tTask := range resForTests {
-		app.Producers[tName].PublicMessage(ctx, pubsub.NewMessageProduce(mainTaskID, tTask))
+		err := app.Producers[tName].PublicMessage(ctx, model.NewMessageProduce(mainTaskID, tTask))
+		if err != nil {
+			log.Printf("Error publishing task for\t%s:\t%v\n", tName, err)
+			errCount++
+		}
 	}
+
+	if errCount > len(resForTests)/2 {
+		return errors.New("failed to publish completed results")
+	}
+
+	return nil
 }

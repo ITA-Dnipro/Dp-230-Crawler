@@ -2,9 +2,11 @@ package pubsub
 
 import (
 	"context"
+	"encoding/json"
 	"log"
 
 	"github.com/segmentio/kafka-go"
+	"parabellum.crawler/model"
 )
 
 type Producer struct {
@@ -18,18 +20,30 @@ func NewProducer(url, topic string) *Producer {
 		Topic:    topic,
 		Balancer: &kafka.LeastBytes{},
 	}
+
 	return result
 }
 
-func (prod *Producer) PublicMessage(ctx context.Context, message Message) error {
+func (prod *Producer) PublicMessage(ctx context.Context, message *model.MessageProduce) error {
+	valueJson, err := json.Marshal(message.Value)
+	if err != nil {
+		log.Printf("Error marshalling %v to json: %v\n", message.Value, err)
+
+		return err
+	}
+
 	msg := kafka.Message{
 		Key:   []byte(message.Key),
-		Value: message.Value.ToJson(),
+		Value: valueJson,
 		Time:  message.Time,
 	}
 
 	log.Println("Publishing into Kafka topic:", prod.kafkaWriter.Topic)
-	log.Println("\t", string(msg.Value))
+	msgOut := string(msg.Value)
+	if len(msgOut) > 250 {
+		msgOut = msgOut[:250] + "\t..."
+	}
+	log.Println("\t", msgOut)
 
 	return prod.kafkaWriter.WriteMessages(ctx, msg)
 }

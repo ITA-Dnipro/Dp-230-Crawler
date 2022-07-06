@@ -2,24 +2,19 @@ package main
 
 import (
 	"log"
+	"os"
+	"strconv"
 	"time"
 
 	"parabellum.crawler/internal/crawler"
-	"parabellum.crawler/internal/pubsub"
 )
-
-type Config struct {
-	Crawler   *crawler.Crawler
-	Consumer  *pubsub.Consumer
-	Producers map[string]*pubsub.Producer
-}
 
 const pathToEnvFile = ".env"
 
 const (
-	DEFAULT_TIMEOUT = time.Minute
-	NUM_OF_THREADS  = 50
-	MAX_DEPTH       = 3
+	TypeString = iota
+	TypeInt
+	TypeTimeSecond
 )
 
 var TestsFilters = map[string][crawler.NumOfBodyParams]bool{
@@ -37,5 +32,21 @@ func fillTestFilter(testName string, filters ...bool) [crawler.NumOfBodyParams]b
 	var result [crawler.NumOfBodyParams]bool
 	result[crawler.HasFormTag] = filters[crawler.HasFormTag]
 	result[crawler.HasQueryParameter] = filters[crawler.HasQueryParameter]
+
 	return result
+}
+
+func EnvVarOfType(varName string, varType int) any {
+	strVal := os.Getenv(varName)
+	switch varType {
+	case TypeString:
+		return strVal
+	case TypeInt:
+		res, _ := strconv.Atoi(strVal)
+		return res
+	case TypeTimeSecond:
+		res, _ := strconv.Atoi(strVal)
+		return time.Duration(res) * time.Second
+	}
+	return nil
 }
