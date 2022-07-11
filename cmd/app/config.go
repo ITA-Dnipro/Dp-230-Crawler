@@ -17,6 +17,7 @@ const (
 	TypeTimeSecond
 )
 
+//TestFilters represents how endpoints should be filtered between tests
 var TestsFilters = map[string][crawler.NumOfBodyParams]bool{
 	"SQLI-check": fillTestFilter("SQLi", true, false),
 	"BA-check":   fillTestFilter("Broken auth", true, false),
@@ -36,6 +37,7 @@ func fillTestFilter(testName string, filters ...bool) [crawler.NumOfBodyParams]b
 	return result
 }
 
+//EnvVarOfType returns environment variable converted to a given type
 func EnvVarOfType(varName string, varType int) any {
 	strVal := os.Getenv(varName)
 	switch varType {
@@ -43,10 +45,13 @@ func EnvVarOfType(varName string, varType int) any {
 		return strVal
 	case TypeInt:
 		res, _ := strconv.Atoi(strVal)
+
 		return res
 	case TypeTimeSecond:
 		res, _ := strconv.Atoi(strVal)
+
 		return time.Duration(res) * time.Second
 	}
+
 	return nil
 }

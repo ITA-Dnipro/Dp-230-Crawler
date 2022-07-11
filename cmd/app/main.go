@@ -17,10 +17,11 @@ import (
 	"github.com/joho/godotenv"
 )
 
+//Config represents the core application structure
 type Config struct {
-	Crawler   *crawler.Crawler
-	Consumer  *pubsub.Consumer
-	Producers map[string]*pubsub.Producer
+	Crawler   *crawler.Crawler            //crawler to visit links on a given url
+	Consumer  *pubsub.Consumer            //to read tasks for the app from pubsub
+	Producers map[string]*pubsub.Producer //to push tasks for test-services
 }
 
 func init() {
@@ -55,6 +56,7 @@ func main() {
 	}
 }
 
+//ExecuteNextTask completes one received task from pubsub, returns error if something goes wrong
 func (app *Config) ExecuteNextTask(exitCtx context.Context) error {
 	taskInfo, err := app.Consumer.FetchMessage(exitCtx)
 	if err != nil {

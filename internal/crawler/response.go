@@ -7,24 +7,28 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
+//NumOfBodyParams size of array of test-services filter parameters
 const NumOfBodyParams = 2
 const (
-	HasFormTag = iota
-	HasQueryParameter
+	HasFormTag        = iota //index of HasForm filter in array of test-services parameters
+	HasQueryParameter        //index of HasQuery filter
 )
 
+//Response representation of a single crawler result
 type Response struct {
-	VisitedLink    *Link
-	StatusCode     int
-	BodyForQueries *goquery.Document
-	BodyParams     [NumOfBodyParams]bool
+	VisitedLink    *Link                 //link that was visited
+	StatusCode     int                   //http status code
+	BodyForQueries *goquery.Document     //body for further analysis with goquery lib
+	BodyParams     [NumOfBodyParams]bool //values with filter matching 0-has form, 1-has query param ...
 }
 
+//Link url to visit with jumps made to get to that url
 type Link struct {
-	URL   string
-	Jumps int
+	URL   string //visited url
+	Jumps int    //depth where this very link was found on
 }
 
+//NewLink is a [crawler.Link] constructor
 func NewLink(uri string, jumps ...int) *Link {
 	jumpsToSet := 0
 	if len(jumps) > 0 {
@@ -37,6 +41,7 @@ func NewLink(uri string, jumps ...int) *Link {
 	}
 }
 
+//NewResponse is a [crawler.Response] constructor
 func NewResponse(link *Link, status int) *Response {
 	return &Response{
 		VisitedLink: link,
@@ -44,10 +49,12 @@ func NewResponse(link *Link, status int) *Response {
 	}
 }
 
+//EqualsByParams returns true if resp.BodyParams are equal to given ones, false - otherwise
 func (resp *Response) EqualsByParams(comparedParams [NumOfBodyParams]bool) bool {
 	return comparedParams == resp.BodyParams
 }
 
+//FillResponseBody transforms given parameter to a resp.BodyForQueries for further goquery processing
 func (resp *Response) FillResponseBody(receivedBody io.ReadCloser) error {
 	queryDoc, err := goquery.NewDocumentFromReader(receivedBody)
 	if err != nil {
@@ -58,6 +65,7 @@ func (resp *Response) FillResponseBody(receivedBody io.ReadCloser) error {
 	return nil
 }
 
+//FillResponseParameters calculates resp.BodyParams
 func (resp *Response) FillResponseParameters() {
 	resp.fillHasFormTag()
 	resp.fillHasQueryParams()
@@ -83,6 +91,7 @@ func (resp *Response) fillHasQueryParams() {
 	resp.BodyParams[HasQueryParameter] = len(params) > 0
 }
 
+//ParseLinksFromResponse returns array of new url-links found in a given resp.BodyForQueries
 func (resp *Response) ParseLinksFromResponse(crawl *Crawler) []*Link {
 	queryDoc := resp.BodyForQueries
 	if queryDoc == nil {
@@ -114,6 +123,8 @@ func (resp *Response) ParseLinksFromResponse(crawl *Crawler) []*Link {
 	return result
 }
 
+//ClearResponseBody deletes resp.BodyForQueries value for memory saving purposes
+//used after resp.BodyForQueries is no longer needed
 func (resp *Response) ClearResponseBody() {
 	resp.BodyForQueries = nil
 }
