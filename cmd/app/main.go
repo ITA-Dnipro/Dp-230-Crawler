@@ -92,12 +92,13 @@ func (app *Config) ExecuteNextTask(exitCtx context.Context) error {
 
 func (app *Config) initPubSub() {
 	kafkaURL := EnvVarOfType("KAFKA_URL", TypeString).(string)
+	topicRead := EnvVarOfType("KAFKA_TOPIC_API", TypeString).(string)
 
-	app.Consumer = pubsub.NewConsumer(kafkaURL, EnvVarOfType("KAFKA_TOPIC_API", TypeString).(string))
+	app.Consumer = pubsub.NewConsumer(pubsub.RealKafkaReader(kafkaURL, topicRead), topicRead)
 
 	app.Producers = map[string]*pubsub.Producer{}
 	for testName := range TestsFilters {
-		app.Producers[testName] = pubsub.NewProducer(kafkaURL, testName)
+		app.Producers[testName] = pubsub.NewProducer(pubsub.RealKafkaWriter(kafkaURL, testName), testName)
 	}
 }
 

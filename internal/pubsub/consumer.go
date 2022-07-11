@@ -13,20 +13,30 @@ import (
 
 const groupID = "crawler-service"
 
-type Consumer struct {
-	Topic       string
-	kafkaReader *kafka.Reader
+type KafkaReader interface {
+	FetchMessage(context.Context) (kafka.Message, error)
+	CommitMessages(context.Context, ...kafka.Message) error
+	Close() error
 }
 
-func NewConsumer(url, topic string) *Consumer {
-	result := new(Consumer)
-	result.kafkaReader = kafka.NewReader(kafka.ReaderConfig{
+type Consumer struct {
+	Topic       string
+	kafkaReader KafkaReader
+}
+
+func RealKafkaReader(url, topic string) *kafka.Reader {
+	return kafka.NewReader(kafka.ReaderConfig{
 		Brokers:  strings.Split(url, ","),
 		Topic:    topic,
 		GroupID:  groupID,
 		MinBytes: 10e3,
 		MaxBytes: 10e5,
 	})
+}
+
+func NewConsumer(krd KafkaReader, topic string) *Consumer {
+	result := new(Consumer)
+	result.kafkaReader = krd
 	result.Topic = topic
 
 	return result

@@ -9,17 +9,28 @@ import (
 	"parabellum.crawler/model"
 )
 
-type Producer struct {
-	kafkaWriter *kafka.Writer
+type KafkaWriter interface {
+	WriteMessages(context.Context, ...kafka.Message) error
+	Close() error
 }
 
-func NewProducer(url, topic string) *Producer {
-	result := new(Producer)
-	result.kafkaWriter = &kafka.Writer{
+type Producer struct {
+	Topic       string
+	kafkaWriter KafkaWriter
+}
+
+func RealKafkaWriter(url, topic string) *kafka.Writer {
+	return &kafka.Writer{
 		Addr:     kafka.TCP(url),
 		Topic:    topic,
 		Balancer: &kafka.LeastBytes{},
 	}
+}
+
+func NewProducer(kwr KafkaWriter, topic string) *Producer {
+	result := new(Producer)
+	result.kafkaWriter = kwr
+	result.Topic = topic
 
 	return result
 }
@@ -38,7 +49,7 @@ func (prod *Producer) PublicMessage(ctx context.Context, message *model.MessageP
 		Time:  message.Time,
 	}
 
-	log.Println("Publishing into Kafka topic:", prod.kafkaWriter.Topic)
+	log.Println("Publishing into Kafka topic:", prod.Topic)
 	msgOut := string(msg.Value)
 	if len(msgOut) > 250 {
 		msgOut = msgOut[:250] + "\t..."
