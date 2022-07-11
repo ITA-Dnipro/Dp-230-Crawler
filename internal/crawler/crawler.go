@@ -11,12 +11,14 @@ import (
 	"time"
 )
 
+//ErrContextDone predefined error for the case of ctx.Done
 var ErrContextDone = fmt.Errorf("exit on context done")
 
+//Crawler defines struct to do a "crawl" job with a given url
 type Crawler struct {
-	URL      *url.URL
-	Result   *sync.Map
-	MaxJumps int
+	URL      *url.URL  //given url representation
+	Result   *sync.Map //map for result holding
+	MaxJumps int       //max depth of visiting url's found inside parent url
 	ctx      context.Context
 	ch       chan struct{}
 	wg       *sync.WaitGroup
@@ -27,7 +29,8 @@ type httpClientGetter interface {
 	Get(link string) (resp *http.Response, err error)
 }
 
-func NewCrawlerInit(ctx context.Context, urlCrawl *url.URL) *Crawler {
+//NewCrawler is a [crawler.Crawler] constructor
+func NewCrawler(ctx context.Context, urlCrawl *url.URL) *Crawler {
 	ch := make(chan struct{}, 1)
 	ch <- struct{}{}
 
@@ -45,17 +48,20 @@ func NewCrawlerInit(ctx context.Context, urlCrawl *url.URL) *Crawler {
 	}
 }
 
+//SetNumberOfThreads sets max number of goroutines to execute crawling operations
 func (cr *Crawler) SetNumberOfThreads(num int) {
 	ch := make(chan struct{}, num)
 	ch <- struct{}{}
 	cr.ch = ch
 }
 
+//Wait waits until crawler completes its task or exits on context
 func (cr *Crawler) Wait() {
 	cr.wg.Wait()
 	close(cr.ch)
 }
 
+//ExploreLink visits given link & puts received results from it into cr.Result
 func (cr *Crawler) ExploreLink(link *Link) {
 	cr.wg.Add(1)
 
@@ -77,7 +83,7 @@ func (cr *Crawler) ExploreLink(link *Link) {
 
 		return
 	}
-	pageResponse.ContainsFormTag()
+	pageResponse.FillResponseParameters()
 	cr.Result.Store(link.URL, pageResponse)
 
 	go cr.queueLinksVisit(pageResponse)

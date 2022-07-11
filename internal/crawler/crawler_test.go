@@ -41,14 +41,14 @@ func init() {
 }
 
 func TestSetNumberOfThreads(t *testing.T) {
-	crawler := NewCrawlerInit(context.Background(), &url.URL{})
+	crawler := NewCrawler(context.Background(), &url.URL{})
 	expectedNum := 5
 	crawler.SetNumberOfThreads(expectedNum)
 	require.EqualValuesf(t, expectedNum, cap(crawler.ch), "should set %d threads", expectedNum)
 }
 
 func TestWait(t *testing.T) {
-	crawler := NewCrawlerInit(context.Background(), &url.URL{})
+	crawler := NewCrawler(context.Background(), &url.URL{})
 	crawler.Wait()
 	for cc := range crawler.ch {
 		_ = cc
@@ -59,7 +59,7 @@ func TestWait(t *testing.T) {
 
 func TestAbsoluteUrl(t *testing.T) {
 	urlFake, _ := url.Parse(fakeLink)
-	crawler := NewCrawlerInit(context.Background(), urlFake)
+	crawler := NewCrawler(context.Background(), urlFake)
 
 	tabTests := []struct {
 		name           string
@@ -96,33 +96,33 @@ func TestExploreLink(t *testing.T) {
 	someResponse := &Response{
 		VisitedLink: link,
 		StatusCode:  http.StatusOK,
-		HasFormTag:  true,
 	}
+	someResponse.BodyParams[HasFormTag] = true
 	smWithResponse := &sync.Map{}
 	smWithResponse.Store(fakeLink, someResponse)
 	smWithEmpty := &sync.Map{}
 	smWithEmpty.Store(fakeLink, &Response{})
 
 	ctxCanCancel, cancel := context.WithCancel(context.Background())
-	crawlerWithContext := NewCrawlerInit(ctxCanCancel, &url.URL{})
+	crawlerWithContext := NewCrawler(ctxCanCancel, &url.URL{})
 	cancel()
 
-	crawlerWithLink := NewCrawlerInit(context.Background(), &url.URL{})
+	crawlerWithLink := NewCrawler(context.Background(), &url.URL{})
 	crawlerWithLink.Result.Store(fakeLink, &Response{})
 
-	crawlerWithMaxJumps := NewCrawlerInit(context.Background(), &url.URL{})
+	crawlerWithMaxJumps := NewCrawler(context.Background(), &url.URL{})
 	crawlerWithMaxJumps.MaxJumps = 1
 
 	urlGoogle, _ := url.Parse("https://www.google.com/")
-	crawlerWithURL := NewCrawlerInit(context.Background(), urlGoogle)
+	crawlerWithURL := NewCrawler(context.Background(), urlGoogle)
 	crawlerWithURL.MaxJumps = 10
 
 	urlWrongGet, _ := url.Parse(fakeLink + "wrong")
-	crawlerWithWrongGet := NewCrawlerInit(context.Background(), urlWrongGet)
+	crawlerWithWrongGet := NewCrawler(context.Background(), urlWrongGet)
 	crawlerWithWrongGet.client = &httpClientStub{}
 
 	urlCorrectGet, _ := url.Parse(fakeLink)
-	crawlerWithCorrectGet := NewCrawlerInit(context.Background(), urlCorrectGet)
+	crawlerWithCorrectGet := NewCrawler(context.Background(), urlCorrectGet)
 	crawlerWithCorrectGet.client = &httpClientStub{}
 	crawlerWithCorrectGet.MaxJumps = 10
 
@@ -196,7 +196,7 @@ func requireSyncMapsAreEqual(t *testing.T, a, b *sync.Map, msg string) {
 			mapB[key] = &Response{
 				VisitedLink: resp.VisitedLink,
 				StatusCode:  resp.StatusCode,
-				HasFormTag:  resp.HasFormTag,
+				BodyParams:  resp.BodyParams,
 			}
 		}
 
@@ -208,7 +208,7 @@ func requireSyncMapsAreEqual(t *testing.T, a, b *sync.Map, msg string) {
 
 func TestQueueLinksVisit(t *testing.T) {
 	urlFake, _ := url.Parse(fakeLink)
-	crawler := NewCrawlerInit(context.Background(), urlFake)
+	crawler := NewCrawler(context.Background(), urlFake)
 	crawler.client = &httpClientStub{}
 	crawler.MaxJumps = 10
 	crawler.Result.Store(fakeLink+"search", &Response{})
@@ -221,8 +221,8 @@ func TestQueueLinksVisit(t *testing.T) {
 		VisitedLink:    NewLink(fakeLink),
 		StatusCode:     http.StatusOK,
 		BodyForQueries: queryWithLink,
-		HasFormTag:     true,
 	}
+	response.BodyParams[HasFormTag] = true
 
 	crawler.wg.Add(1)
 	<-crawler.ch
