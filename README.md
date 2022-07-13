@@ -28,3 +28,6 @@ XSS-check
 LFI-check
 ```
 Service can be pulled from DockerHub as ```docker pull dmytrothr/parabellum.crawler:latest```
+
+To produce payload for this service you can run ```kafka-console-producer.sh --topic API-Service-Message --broker-list localhost:9092``` directly in your kafka container (the Kafka-container itself for this service could be run from [local-compose.yml](https://github.com/ITA-Dnipro/Dp-230-Crawler/blob/main/local-compose.yml) by this command ```docker-compose -f local-compose.yml up -d```
+Hints about how to produce/consume Kafka topics for yourself could be found here https://kafka.apache.org/quickstart
