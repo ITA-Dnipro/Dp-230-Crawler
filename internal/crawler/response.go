@@ -8,10 +8,11 @@ import (
 )
 
 //NumOfBodyParams size of array of test-services filter parameters
-const NumOfBodyParams = 2
+const NumOfBodyParams = 3
 const (
 	HasFormTag        = iota //index of HasForm filter in array of test-services parameters
 	HasQueryParameter        //index of HasQuery filter
+	HasStatusError
 )
 
 //Response representation of a single crawler result
@@ -49,9 +50,15 @@ func NewResponse(link *Link, status int) *Response {
 	}
 }
 
-//EqualsByParams returns true if resp.BodyParams are equal to given ones, false - otherwise
-func (resp *Response) EqualsByParams(comparedParams [NumOfBodyParams]bool) bool {
-	return comparedParams == resp.BodyParams
+//HasEqualParamsWith returns true if resp.BodyParams has at least one similar parameter to the given parameters, false - otherwise
+func (resp *Response) HasEqualParamsWith(comparedParams [NumOfBodyParams]bool) bool {
+	for i := 0; i < NumOfBodyParams; i++ {
+		if resp.BodyParams[i] == comparedParams[i] {
+			return true
+		}
+	}
+
+	return false
 }
 
 //FillResponseBody transforms given parameter to a resp.BodyForQueries for further goquery processing
@@ -69,6 +76,11 @@ func (resp *Response) FillResponseBody(receivedBody io.ReadCloser) error {
 func (resp *Response) FillResponseParameters() {
 	resp.fillHasFormTag()
 	resp.fillHasQueryParams()
+	resp.fillHasStatusError()
+}
+
+func (resp *Response) fillHasStatusError() {
+	resp.BodyParams[HasStatusError] = resp.StatusCode >= 500
 }
 
 func (resp *Response) fillHasFormTag() {

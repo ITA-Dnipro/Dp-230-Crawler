@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/segmentio/kafka-go"
-	"parabellum.crawler/model"
+	"parabellum.crawler/internal/model"
 )
 
 const groupID = "crawler-service"

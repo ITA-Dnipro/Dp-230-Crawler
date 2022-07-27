@@ -11,10 +11,8 @@ import (
 	"time"
 
 	"parabellum.crawler/internal/crawler"
+	"parabellum.crawler/internal/model"
 	"parabellum.crawler/internal/pubsub"
-	"parabellum.crawler/model"
-
-	"github.com/joho/godotenv"
 )
 
 //Config represents the core application structure
@@ -22,13 +20,6 @@ type Config struct {
 	Crawler   *crawler.Crawler            //crawler to visit links on a given url
 	Consumer  *pubsub.Consumer            //to read tasks for the app from pubsub
 	Producers map[string]*pubsub.Producer //to push tasks for test-services
-}
-
-func init() {
-	err := godotenv.Load(pathToEnvFile)
-	if err != nil {
-		log.Panicln("Error loading .env file: ", err)
-	}
 }
 
 func main() {
@@ -134,7 +125,7 @@ func (app *Config) distributeResultsBetweenTests(tests []string) map[string][]st
 		if curResponse, ok := value.(*crawler.Response); ok {
 			for _, tName := range tests {
 				tParam := TestsFilters[tName]
-				if curResponse.EqualsByParams(tParam) {
+				if curResponse.HasEqualParamsWith(tParam) {
 					resForTests[tName] = append(resForTests[tName], curResponse.VisitedLink.URL)
 				}
 			}

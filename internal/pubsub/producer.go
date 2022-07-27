@@ -6,7 +6,7 @@ import (
 	"log"
 
 	"github.com/segmentio/kafka-go"
-	"parabellum.crawler/model"
+	"parabellum.crawler/internal/model"
 )
 
 //KafkaWriter interface mostly for test implementing purposes

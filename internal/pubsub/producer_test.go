@@ -6,7 +6,7 @@ import (
 
 	"github.com/segmentio/kafka-go"
 	"github.com/stretchr/testify/require"
-	"parabellum.crawler/model"
+	"parabellum.crawler/internal/model"
 )
 
 type kafkaWriterStub struct{}
