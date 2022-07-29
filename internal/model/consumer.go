@@ -14,7 +14,8 @@ type MessageConsume struct {
 
 //TaskConsume received task format
 type TaskConsume struct {
-	ID        string   `json:"id"`        //main task id
-	URL       string   `json:"url"`       //main task url to crawl
-	ForwardTo []string `json:"forwardTo"` //list of test-services topics names to send results to
+	ID          string   `json:"id"`          //main task id
+	URL         string   `json:"url"`         //main task url to crawl
+	ForwardTo   []string `json:"forwardTo"`   //list of test-services topics names to send results to
+	SkipCrawler bool     `json:"skipCrawler"` //if no crawling needed, just forward to tests
 }

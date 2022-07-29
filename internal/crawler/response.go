@@ -53,7 +53,7 @@ func NewResponse(link *Link, status int) *Response {
 //HasEqualParamsWith returns true if resp.BodyParams has at least one similar parameter to the given parameters, false - otherwise
 func (resp *Response) HasEqualParamsWith(comparedParams [NumOfBodyParams]bool) bool {
 	for i := 0; i < NumOfBodyParams; i++ {
-		if resp.BodyParams[i] == comparedParams[i] {
+		if resp.BodyParams[i] && resp.BodyParams[i] == comparedParams[i] {
 			return true
 		}
 	}

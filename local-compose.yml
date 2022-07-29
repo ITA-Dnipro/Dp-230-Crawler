@@ -1,9 +1,14 @@
 version: "3"
 services:
+  zookeeper:
+    container_name: parabellum-zookeeper
+    image: wurstmeister/zookeeper
+
   kafka:
+    container_name: parabellum-kafka
     image: wurstmeister/kafka:2.12-2.3.1
     restart: on-failure
-    links:
+    depends_on:
       - zookeeper
     ports:
       - 9092:9092
@@ -11,7 +16,7 @@ services:
     environment:
       KAFKA_VERSION: '2.3.1'
       KAFKA_BROKER_ID: '1'
-      KAFKA_CREATE_TOPICS: 'API-Service-Message:1:1,SQLI-check:1:1,BA-check:1:1,XSS-check:1:1,LFI-check:1:1'
+      KAFKA_CREATE_TOPICS: 'API-Service-Message:1:1,XSS-check:1:1,5xx-check:1:1'
       KAFKA_DELETE_TOPIC_ENABLE: 'true'
       KAFKA_ADVERTISED_HOST_NAME: 'localhost'
       KAFKA_ADVERTISED_PORT: '9092'
@@ -27,8 +32,3 @@ services:
       CUSTOM_INIT_SCRIPT: |-
         echo -e 'KafkaServer {\norg.apache.kafka.common.security.scram.ScramLoginModule required\n username="adminscram"\n password="admin-secret";\n org.apache.kafka.common.security.plain.PlainLoginModule required\n username="adminplain"\n password="admin-secret"\n user_adminplain="admin-secret";\n  };' > /opt/kafka/config/kafka_server_jaas.conf;
         /opt/kafka/bin/kafka-configs.sh --zookeeper zookeeper:2181 --alter --add-config 'SCRAM-SHA-256=[password=admin-secret-256],SCRAM-SHA-512=[password=admin-secret-512]' --entity-type users --entity-name adminscram
-
-  zookeeper:
-    image: wurstmeister/zookeeper
-    ports:
-      - 2181:2181
