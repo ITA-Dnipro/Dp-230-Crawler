@@ -42,8 +42,10 @@ func (cl *ClientGRPC) Push5XXResult(ctx context.Context, taskID string, fitRespo
 			StartTime: timestamppb.New(time.Now()),
 			PoCs: []*pb.PoC{
 				{
-					Type: err5xxType,
-					Data: fmt.Sprintf("HTTP status:\t%d %s", resp.StatusCode, http.StatusText(resp.StatusCode)),
+					Type:     err5xxType,
+					Payload:  fmt.Sprintf("HTTP status:\t%d %s", resp.StatusCode, http.StatusText(resp.StatusCode)),
+					Data:     resp.VisitedLink.URL,
+					Evidence: resp.VisitedLink.URL,
 				},
 			},
 		})
